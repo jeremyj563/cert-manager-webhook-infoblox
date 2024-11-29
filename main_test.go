@@ -19,7 +19,7 @@ func TestRunsSuite(t *testing.T) {
 	fixture := acmetest.NewFixture(&solver{},
 		acmetest.SetResolvedZone(zone),
 		acmetest.SetAllowAmbientCredentials(false),
-		acmetest.SetManifestPath("testdata/infoblox-solver"),
+		acmetest.SetManifestPath("testdata/cert-manager-webhook-infoblox"),
 	)
 
 	fixture.RunConformance(t)
