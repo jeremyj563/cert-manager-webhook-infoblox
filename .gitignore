@@ -17,3 +17,7 @@ cert-manager-webhook-example
 # Make artifacts
 _out
 _test
+
+# Ignore sensetive test data
+testdata/infoblox-solver/config.json
+testdata/infoblox-solver/credentials.yaml

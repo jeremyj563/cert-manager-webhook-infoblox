@@ -1,15 +1,24 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
+	"strconv"
+	"strings"
 
 	extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	ibclient "github.com/infobloxopen/infoblox-go-client/v2"
 
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/apis/acme/v1alpha1"
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 )
 
 var GroupName = os.Getenv("GROUP_NAME")
@@ -25,25 +34,25 @@ func main() {
 	// webhook, where the Name() method will be used to disambiguate between
 	// the different implementations.
 	cmd.RunWebhookServer(GroupName,
-		&customDNSProviderSolver{},
+		&solver{},
 	)
 }
 
-// customDNSProviderSolver implements the provider-specific logic needed to
+// solver implements the provider-specific logic needed to
 // 'present' an ACME challenge TXT record for your own DNS provider.
 // To do so, it must implement the `github.com/cert-manager/cert-manager/pkg/acme/webhook.Solver`
 // interface.
-type customDNSProviderSolver struct {
+type solver struct {
 	// If a Kubernetes 'clientset' is needed, you must:
 	// 1. uncomment the additional `client` field in this structure below
 	// 2. uncomment the "k8s.io/client-go/kubernetes" import at the top of the file
 	// 3. uncomment the relevant code in the Initialize method below
 	// 4. ensure your webhook's service account has the required RBAC role
 	//    assigned to it for interacting with the Kubernetes APIs you need.
-	//client kubernetes.Clientset
+	client kubernetes.Clientset
 }
 
-// customDNSProviderConfig is a structure that is used to decode into when
+// providerConfig is a structure that is used to decode into when
 // solving a DNS01 challenge.
 // This information is provided by cert-manager, and may be a reference to
 // additional configuration that's needed to solve the challenge for this
@@ -57,14 +66,20 @@ type customDNSProviderSolver struct {
 // You should not include sensitive information here. If credentials need to
 // be used by your provider here, you should reference a Kubernetes Secret
 // resource and fetch these credentials using a Kubernetes clientset.
-type customDNSProviderConfig struct {
+type providerConfig struct {
 	// Change the two fields below according to the format of the configuration
 	// to be decoded.
 	// These fields will be set by users in the
 	// `issuer.spec.acme.dns01.providers.webhook.config` field.
 
-	//Email           string `json:"email"`
-	//APIKeySecretRef v1alpha1.SecretKeySelector `json:"apiKeySecretRef"`
+	View              string                   `json:"view"`
+	Host              string                   `json:"host"`
+	Scheme            string                   `json:"scheme" default:"https"`
+	Port              string                   `json:"port" default:"443"`
+	Version           string                   `json:"version" default:"2.8"`
+	SslVerify         bool                     `json:"sslVerify" default:"true"`
+	UsernameSecretRef cmmeta.SecretKeySelector `json:"usernameSecretRef"`
+	PasswordSecretRef cmmeta.SecretKeySelector `json:"passwordSecretRef"`
 }
 
 // Name is used as the name for this DNS solver when referencing it on the ACME
@@ -73,8 +88,8 @@ type customDNSProviderConfig struct {
 // solvers configured with the same Name() **so long as they do not co-exist
 // within a single webhook deployment**.
 // For example, `cloudflare` may be used as the name of a solver.
-func (c *customDNSProviderSolver) Name() string {
-	return "my-custom-solver"
+func (s *solver) Name() string {
+	return "infoblox"
 }
 
 // Present is responsible for actually presenting the DNS record with the
@@ -82,16 +97,45 @@ func (c *customDNSProviderSolver) Name() string {
 // This method should tolerate being called multiple times with the same value.
 // cert-manager itself will later perform a self check to ensure that the
 // solver has correctly configured the DNS provider.
-func (c *customDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
+func (s *solver) Present(ch *v1alpha1.ChallengeRequest) error {
+	// fmt.Println("Starting presenting")
 	cfg, err := loadConfig(ch.Config)
 	if err != nil {
 		return err
 	}
 
-	// TODO: do something more useful with the decoded configuration
-	fmt.Printf("Decoded configuration %v", cfg)
+	// fmt.Printf("Decoded configuration %v\n", cfg)
 
-	// TODO: add code that sets a record in the DNS provider's console
+	// Initialize a new Infoblox client
+	c, err := s.newInfobloxClient(&cfg, ch.ResourceNamespace)
+	if err != nil {
+		return err
+	}
+
+	// Check if TXT record already exist
+	name := strings.TrimSuffix(ch.ResolvedFQDN, ".")
+
+	reference, err := s.checkForRecord(c, cfg.View, name, ch.Key)
+	// if err != nil {
+	// 	// logf.V(logf.InfoLevel).InfoS("There was an error when checking if record already exist", "Reason", err)
+	// 	// fmt.Printf("2: There was an error when checking if record already exist: %v\n", err)
+	// 	// return nil
+	// }
+
+	// Code that sets a record in the DNS provider's console if none exist
+	if reference != "" {
+		fmt.Printf("Skipping creation, existing record found: %v\n", reference)
+		// logf.V(logf.InfoLevel).InfoS("Skipping creation, existing record found", "reference", reference)
+	} else {
+		reference, err := s.createTXTRecord(c, name, ch.Key, cfg.View)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Created record: %v\n", reference)
+		// logf.V(logf.InfoLevel).InfoS("Created record", "reference", reference)
+	}
+
 	return nil
 }
 
@@ -101,8 +145,42 @@ func (c *customDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
 // value provided on the ChallengeRequest should be cleaned up.
 // This is in order to facilitate multiple DNS validations for the same domain
 // concurrently.
-func (c *customDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
-	// TODO: add code that deletes a record from the DNS provider's console
+func (s *solver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
+	// fmt.Println("Starting cleanup")
+	cfg, err := loadConfig(ch.Config)
+	if err != nil {
+		return err
+	}
+
+	// Initialize a new Infoblox client
+	c, err := s.newInfobloxClient(&cfg, ch.ResourceNamespace)
+	if err != nil {
+		return err
+	}
+
+	// Check if TXT record already exist
+	name := strings.TrimSuffix(ch.ResolvedFQDN, ".")
+
+	reference, err := s.checkForRecord(c, cfg.View, name, ch.Key)
+	if err != nil {
+		fmt.Printf("There was an error when checking if record already exist: %v\n", err)
+		// logf.V(logf.InfoLevel).InfoS("There was an error when checking if record already exist", "error", err)
+	}
+
+	// Code that deletes a record in the DNS provider's console if one is found
+	if reference == "" {
+		fmt.Printf("Skipping deletion, no existing record found\n")
+		// logf.V(logf.InfoLevel).InfoS("Skipping deletion, no existing record found")
+	} else {
+		res, err := s.deleteTXTRecord(c, reference)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Deleted record: %v\n", res)
+		// logf.V(logf.InfoLevel).InfoS("Deleted record", "response", res)
+	}
+
 	return nil
 }
 
@@ -115,16 +193,16 @@ func (c *customDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
 // provider accounts.
 // The stopCh can be used to handle early termination of the webhook, in cases
 // where a SIGTERM or similar signal is sent to the webhook process.
-func (c *customDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
+func (s *solver) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
 	///// UNCOMMENT THE BELOW CODE TO MAKE A KUBERNETES CLIENTSET AVAILABLE TO
 	///// YOUR CUSTOM DNS PROVIDER
 
-	//cl, err := kubernetes.NewForConfig(kubeClientConfig)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//c.client = cl
+	cl, err := kubernetes.NewForConfig(kubeClientConfig)
+	if err != nil {
+		return err
+	}
+
+	s.client = *cl
 
 	///// END OF CODE TO MAKE KUBERNETES CLIENTSET AVAILABLE
 	return nil
@@ -132,8 +210,8 @@ func (c *customDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stop
 
 // loadConfig is a small helper function that decodes JSON configuration into
 // the typed config struct.
-func loadConfig(cfgJSON *extapi.JSON) (customDNSProviderConfig, error) {
-	cfg := customDNSProviderConfig{}
+func loadConfig(cfgJSON *extapi.JSON) (providerConfig, error) {
+	cfg := providerConfig{}
 	// handle the 'base case' where no configuration has been provided
 	if cfgJSON == nil {
 		return cfg, nil
@@ -143,4 +221,91 @@ func loadConfig(cfgJSON *extapi.JSON) (customDNSProviderConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+///// BEGINNING OF CODE FOR INFOBLOX SOLVER
+
+func (s *solver) newInfobloxClient(cfg *providerConfig, namespace string) (ibclient.IBConnector, error) {
+	username, err := s.getSecret(cfg.UsernameSecretRef, namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	password, err := s.getSecret(cfg.PasswordSecretRef, namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	_t := reflect.TypeOf(providerConfig{})
+	if cfg.Port == "" {
+		_f, _ := _t.FieldByName("Port")
+		cfg.Port = _f.Tag.Get("default")
+	}
+
+	if cfg.Version == "" {
+		_f, _ := _t.FieldByName("Version")
+		cfg.Version = _f.Tag.Get("default")
+	}
+
+	hostConfig := ibclient.HostConfig{
+		Scheme:  "https",
+		Host:    cfg.Host,
+		Version: cfg.Version,
+		Port:    cfg.Port,
+	}
+
+	authConfig := ibclient.AuthConfig{
+		Username: username,
+		Password: password,
+	}
+
+	transportConfig := ibclient.NewTransportConfig(strconv.FormatBool(cfg.SslVerify), 60, 10)
+	requestBuilder := &ibclient.WapiRequestBuilder{}
+	requestor := &ibclient.WapiHttpRequestor{}
+
+	c, err := ibclient.NewConnector(hostConfig, authConfig, transportConfig, requestBuilder, requestor)
+	if err != nil {
+		return nil, err
+	}
+
+	return c, nil
+}
+
+func (s *solver) getSecret(sel cmmeta.SecretKeySelector, namespace string) (string, error) {
+	secret, err := s.client.CoreV1().Secrets(namespace).Get(context.Background(), sel.Name, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+
+	secretData, ok := secret.Data[sel.Key]
+	if !ok {
+		return "", err
+	}
+
+	return strings.TrimSuffix(string(secretData), "\n"), nil
+}
+
+func (s *solver) checkForRecord(c ibclient.IBConnector, view string, name string, text string) (string, error) {
+	var records []ibclient.RecordTXT
+	record := ibclient.NewRecordTXT("", "", "", "", uint32(0), false, "", ibclient.EA{})
+	params := map[string]string{
+		"name": name,
+		"text": text,
+		"view": view,
+	}
+	err := c.GetObject(record, "", ibclient.NewQueryParams(false, params), &records)
+
+	if len(records) > 0 {
+		return records[0].Ref, err
+	} else {
+		return "", err
+	}
+}
+
+func (s *solver) createTXTRecord(c ibclient.IBConnector, name string, text string, view string) (string, error) {
+	return c.CreateObject(ibclient.NewRecordTXT(view, "", name, text, uint32(0), false, "", ibclient.EA{}))
+}
+
+func (s *solver) deleteTXTRecord(c ibclient.IBConnector, ref string) (string, error) {
+	return c.DeleteObject(ref)
 }
