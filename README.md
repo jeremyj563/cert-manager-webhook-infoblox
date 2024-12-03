@@ -59,4 +59,4 @@ own options in order for tests to pass.
 
 ## Helm
 
-Charts are built automatically on push to master branch.
+Charts are built automatically on push to master branch using GitHub actions.
