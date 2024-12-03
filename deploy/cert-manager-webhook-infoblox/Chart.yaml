@@ -1,5 +1,15 @@
 apiVersion: v1
-appVersion: "1.0"
-description: A Helm chart for Kubernetes
-name: example-webhook
-version: 0.1.0
+appVersion: "0.0.1"
+version: 0.0.1
+name: cert-manager-webhook-infoblox
+description: cert-manager webhook for resolving DNS01 challenges using Infoblox
+keywords:
+  - dns
+  - acme
+  - webhook
+  - infoblox
+  - letsencrypt
+  - cert-manager
+home: https://github.com/tazthemaniac/cert-manager-webhook-infoblox/
+sources:
+  - https://github.com/tazthemaniac/cert-manager-webhook-infoblox/

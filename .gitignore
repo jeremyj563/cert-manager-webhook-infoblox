@@ -19,5 +19,5 @@ _out
 _test
 
 # Ignore sensetive test data
-testdata/cert-manager-webhook-infoblox/config.json
-testdata/cert-manager-webhook-infoblox/credentials.yaml
+testdata/**/*.json
+testdata/**/*.yaml

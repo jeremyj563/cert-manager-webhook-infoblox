@@ -2,8 +2,8 @@ GO ?= $(shell which go)
 OS ?= $(shell $(GO) env GOOS)
 ARCH ?= $(shell $(GO) env GOARCH)
 
-IMAGE_NAME := "webhook"
-IMAGE_TAG := "latest"
+IMAGE_NAME := "cert-manager-webhook-infoblox"
+IMAGE_TAG := "0.0.1"
 
 OUT := $(shell pwd)/_out
 
@@ -30,6 +30,7 @@ clean:
 .PHONY: build
 build:
 	docker build -t "$(IMAGE_NAME):$(IMAGE_TAG)" .
+	docker tag "$(IMAGE_NAME):$(IMAGE_TAG)" "$(IMAGE_NAME):latest"
 
 .PHONY: rendered-manifest.yaml
 rendered-manifest.yaml: $(OUT)/rendered-manifest.yaml

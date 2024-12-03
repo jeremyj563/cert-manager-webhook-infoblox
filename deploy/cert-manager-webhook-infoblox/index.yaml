@@ -1,0 +1,23 @@
+apiVersion: v1
+entries:
+  cert-manager-webhook-infoblox:
+  - apiVersion: v1
+    appVersion: 0.0.1
+    created: "2024-12-03T09:05:41.245770192Z"
+    description: Infoblox and cert-manager webhook fot resolving DNS01 challenges
+    digest: 05d4efe8b085886a646181a9ff5d439f3975798e090ab41b8d2b95cf09150992
+    home: https://github.com/TazTheManiac/cert-manager-webhook-infoblox/
+    keywords:
+    - dns
+    - acme
+    - webhook
+    - infoblox
+    - letsencrypt
+    - cert-manager
+    name: cert-manager-webhook-infoblox
+    sources:
+    - https://github.com/TazTheManiac/cert-manager-webhook-infoblox/
+    urls:
+    - cert-manager-webhook-infoblox-0.0.1.tgz
+    version: 0.0.1
+generated: "2024-12-03T09:05:41.245190096Z"
