@@ -56,3 +56,7 @@ $ TEST_ZONE_NAME=example.com. make test
 
 The example file has a number of areas you must fill in and replace with your
 own options in order for tests to pass.
+
+## Helm
+
+Charts are built automatically on push to master branch.
