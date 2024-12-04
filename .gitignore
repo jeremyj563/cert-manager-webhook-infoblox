@@ -21,3 +21,6 @@ _test
 # Ignore sensetive test data
 testdata/**/*.json
 testdata/**/*.yaml
+
+# Ignore VS Code folder
+.vscode
