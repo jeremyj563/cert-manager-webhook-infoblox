@@ -5,7 +5,7 @@ Heavily inspired from the work done by [Luis Gracia](https://github.com/luisico)
 
 ## Adding the repo
 
-Add the repo to helm using the following command:
+Add the helm repo using the following command:
 
 ```bash
 helm repo add cert-manager-webhook-infoblox https://tazthemaniac.github.io/cert-manager-webhook-infoblox/
@@ -19,7 +19,9 @@ Begin by installing cert-manager following the official instructions.
 After that, install the chart in the cert-manager namespace, and remember to set the `groupName` to a unique value.
 
 ```bash
-helm install cert-manager-webhook-infoblox --namespace cert-manager --set groupName="acme.department.company.com"
+helm install cert-manager-webhook-infoblox --namespace cert-manager \
+  cert-manager-webhook-infoblox/cert-manager-webhook-infoblox \
+  --set groupName="acme.department.company.com"
 ```
 
 Full list of settings and default values at the bottom.
@@ -137,9 +139,9 @@ subjects:
 
 Following is a list of all the options available when installing the chart and the default values.
 
-| Name                           | Value                                      |
+| Name                           | Default Value                              |
 | ------------------------------ | ------------------------------------------ |
-| groupName                      | acme.mycompany.com                         |
+| groupName                      | ""                                         |
 | nameOverride                   | ""                                         |
 | fullNameOverride               | ""                                         |
 | rootCACertificate.duration     | 43800h                                     |
