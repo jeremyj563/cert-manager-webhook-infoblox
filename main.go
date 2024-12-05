@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"reflect"
 	"strconv"
@@ -19,12 +18,14 @@ import (
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/apis/acme/v1alpha1"
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	logf "github.com/cert-manager/cert-manager/pkg/logs"
 )
 
 var GroupName = os.Getenv("GROUP_NAME")
 
 func main() {
 	if GroupName == "" {
+		logf.V(logf.ErrorLevel).ErrorS(nil, "No value specified for environment variable 'GROUP_NAME'")
 		panic("GROUP_NAME must be specified")
 	}
 
@@ -98,13 +99,10 @@ func (s *solver) Name() string {
 // cert-manager itself will later perform a self check to ensure that the
 // solver has correctly configured the DNS provider.
 func (s *solver) Present(ch *v1alpha1.ChallengeRequest) error {
-	// fmt.Println("Starting presenting")
 	cfg, err := loadConfig(ch.Config)
 	if err != nil {
 		return err
 	}
-
-	// fmt.Printf("Decoded configuration %v\n", cfg)
 
 	// Initialize a new Infoblox client
 	c, err := s.newInfobloxClient(&cfg, ch.ResourceNamespace)
@@ -116,24 +114,17 @@ func (s *solver) Present(ch *v1alpha1.ChallengeRequest) error {
 	name := strings.TrimSuffix(ch.ResolvedFQDN, ".")
 
 	reference, err := s.checkForRecord(c, cfg.View, name, ch.Key)
-	// if err != nil {
-	// 	// logf.V(logf.InfoLevel).InfoS("There was an error when checking if record already exist", "Reason", err)
-	// 	// fmt.Printf("2: There was an error when checking if record already exist: %v\n", err)
-	// 	// return nil
-	// }
 
-	// Code that sets a record in the DNS provider's console if none exist
+	// Create a record in the DNS provider's console if none exist
 	if reference != "" {
-		fmt.Printf("Skipping creation, existing record found: %v\n", reference)
-		// logf.V(logf.InfoLevel).InfoS("Skipping creation, existing record found", "reference", reference)
+		logf.V(logf.InfoLevel).InfoS("Skipping creation, existing record found", "name", name, "reference", reference)
 	} else {
 		reference, err := s.createTXTRecord(c, name, ch.Key, cfg.View)
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("Created record: %v\n", reference)
-		// logf.V(logf.InfoLevel).InfoS("Created record", "reference", reference)
+		logf.V(logf.InfoLevel).InfoS("Created TXT record", "name", name, "reference", reference)
 	}
 
 	return nil
@@ -146,7 +137,6 @@ func (s *solver) Present(ch *v1alpha1.ChallengeRequest) error {
 // This is in order to facilitate multiple DNS validations for the same domain
 // concurrently.
 func (s *solver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
-	// fmt.Println("Starting cleanup")
 	cfg, err := loadConfig(ch.Config)
 	if err != nil {
 		return err
@@ -163,22 +153,19 @@ func (s *solver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
 
 	reference, err := s.checkForRecord(c, cfg.View, name, ch.Key)
 	if err != nil {
-		fmt.Printf("There was an error when checking if record already exist: %v\n", err)
-		// logf.V(logf.InfoLevel).InfoS("There was an error when checking if record already exist", "error", err)
+		logf.V(logf.InfoLevel).InfoS("There was an error when checking if record already exist", "name", name, "reference", reference)
 	}
 
-	// Code that deletes a record in the DNS provider's console if one is found
+	// Delete the record in the DNS provider's console if it is found
 	if reference == "" {
-		fmt.Printf("Skipping deletion, no existing record found\n")
-		// logf.V(logf.InfoLevel).InfoS("Skipping deletion, no existing record found")
+		logf.V(logf.InfoLevel).InfoS("Skipping deletion, no existing record found", "name", name, "reference", reference)
 	} else {
-		res, err := s.deleteTXTRecord(c, reference)
+		_, err := s.deleteTXTRecord(c, reference)
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("Deleted record: %v\n", res)
-		// logf.V(logf.InfoLevel).InfoS("Deleted record", "response", res)
+		logf.V(logf.InfoLevel).InfoS("Deleted TXT record", "name", name, "reference", reference)
 	}
 
 	return nil
@@ -217,7 +204,8 @@ func loadConfig(cfgJSON *extapi.JSON) (providerConfig, error) {
 		return cfg, nil
 	}
 	if err := json.Unmarshal(cfgJSON.Raw, &cfg); err != nil {
-		return cfg, fmt.Errorf("error decoding solver config: %v", err)
+		logf.V(logf.ErrorLevel).ErrorS(nil, "There was an error decoding the solver config")
+		return cfg, err
 	}
 
 	return cfg, nil
