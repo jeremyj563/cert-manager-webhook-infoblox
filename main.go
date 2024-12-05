@@ -26,7 +26,7 @@ var GroupName = os.Getenv("GROUP_NAME")
 func main() {
 	if GroupName == "" {
 		logf.V(logf.ErrorLevel).ErrorS(nil, "No value specified for environment variable 'GROUP_NAME'")
-		panic("GROUP_NAME must be specified")
+		panic("environment variable GROUP_NAME must have a value")
 	}
 
 	// This will register our custom DNS provider with the webhook serving

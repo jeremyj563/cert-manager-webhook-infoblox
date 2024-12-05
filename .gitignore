@@ -24,3 +24,6 @@ testdata/**/*.yaml
 
 # Ignore VS Code folder
 .vscode
+
+# Ignore packaged helm charts
+*.tgz
