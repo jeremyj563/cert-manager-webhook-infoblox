@@ -46,7 +46,16 @@ dev:
     devImage: golang:1.23
     # Sync files between the local filesystem and the development container
     sync:
-      - path: ./
+    - path: ./
+      excludeFile: .gitignore
+      excludePaths:
+      - '!.vscode/'
+      - .github/
+      - charts/
+      - kustomize/
+      - testdata/
+      - Dockerfile
+      - devspace.yaml
     # Open a terminal and use the following command to start it
     terminal:
       command: ./devspace_start.sh
