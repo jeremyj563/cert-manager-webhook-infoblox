@@ -1,3 +1,7 @@
+# Build directories
+bin/
+pkg/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -27,3 +31,12 @@ testdata/**/*.yaml
 
 # Ignore packaged helm charts
 *.tgz
+
+# Ignore DevSpace cache and log folder
+.devspace/
+
+# Debug files
+__debug*
+
+# Application generated
+apiserver*/
