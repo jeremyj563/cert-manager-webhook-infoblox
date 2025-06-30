@@ -1,0 +1,3 @@
+extraEnv:
+- name: HTTP_PROXY
+  value: http://proxy.rockwellcollins.lab:9091

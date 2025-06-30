@@ -12,6 +12,8 @@ certManager:
   namespace: cert-manager
   serviceAccountName: cert-manager
 
+extraEnv: []
+
 image:
   repository: tazthemaniac/cert-manager-webhook-infoblox
   tag: latest
