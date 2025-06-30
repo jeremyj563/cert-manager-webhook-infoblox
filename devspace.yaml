@@ -29,30 +29,13 @@ images:
 # This is a list of `deployments` that DevSpace can create for this project
 deployments:
   app:
-    # This deployment uses `helm` but you can also define `kubectl` deployments or kustomizations
-    helm:
-      # We are deploying this project with the Helm chart you provided
-      chart:
-        name: ./charts/cert-manager-webhook-infoblox
-      # Under `values` we can define the values for this Helm chart used during `helm install/upgrade`
-      # You may also use `valuesFiles` to load values from files, e.g. valuesFiles: ["values.yaml"]
-      values:
-        extraEnv:
-        - name: HTTP_PROXY
-          value: &httpProxy http://proxy.rockwellcollins.lab:9091
-        - name: HTTPS_PROXY
-          value: *httpProxy
-        - name: http_proxy
-          value: *httpProxy
-        - name: https_proxy
-          value: *httpProxy
-        - name: NO_PROXY
-          value: &noProxy 0.0.0.0,127.0.0.0/8,10.0.0.0/8,172.0.0.0/8,192.168.0.0/16,128.24.38.126,169.254.169.254,internal,localhost,local,default,svc
-        - name: no_proxy
-          value: *noProxy
-        groupName: testing
-        service:
-          port: 8443
+    kubectl:
+      kustomize: true
+      kustomizeArgs:
+      - --enable-helm
+      - --load-restrictor=LoadRestrictionsNone
+      manifests:
+      - ./kustomize/
 
 # This is a list of `dev` containers that are based on the containers created by your deployments
 dev:

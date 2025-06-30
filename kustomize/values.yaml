@@ -1,0 +1,15 @@
+extraEnv:
+- name: HTTP_PROXY
+  value: &httpProxy http://proxy.rockwellcollins.lab:9091
+- name: HTTPS_PROXY
+  value: *httpProxy
+- name: http_proxy
+  value: *httpProxy
+- name: https_proxy
+  value: *httpProxy
+- name: NO_PROXY
+  value: &noProxy 0.0.0.0,127.0.0.0/8,10.0.0.0/8,172.0.0.0/8,192.168.0.0/16,128.24.38.126,169.254.169.254,internal,localhost,local,default,svc
+- name: no_proxy
+  value: *noProxy
+service:
+  port: 8443

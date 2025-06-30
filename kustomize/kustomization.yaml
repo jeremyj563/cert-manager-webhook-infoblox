@@ -1,0 +1,10 @@
+helmGlobals:
+  chartHome: ../charts
+helmCharts:
+- name: cert-manager-webhook-infoblox
+  namespace: cert-manager
+  additionalValuesFiles:
+  - values.yaml
+  releaseName: acme-auth-ray-com
+  valuesInline:
+    groupName: acme.auth.ray.com
